@@ -1,13 +1,21 @@
 export type ScopeContent = Array<Scope | string[]>;
-export type Scope = { id: string; content: ScopeContent };
+export type Scope = { id: string; properties: ScopeContent };
 
-export default class NginxConfig {
-  static parse(str: string) {
-    const createScope = (id: string, content: ScopeContent = []): Scope => {
-      return { id, content };
+const indent = (str: string, indent: number) => {
+  const code = new Array(indent).fill(" ").join("");
+  return str
+    .split(/\n/g)
+    .map((l) => code + l)
+    .join("\n");
+};
+
+export default class ConfFile {
+  static parse(str: string): ScopeContent {
+    const createScope = (id: string, properties: ScopeContent = []): Scope => {
+      return { id, properties };
     };
 
-    const file = createScope("root", [["root"]]);
+    const file = createScope("root", []);
     const route = [file];
 
     let scope: Scope = route[0];
@@ -32,10 +40,13 @@ export default class NginxConfig {
         // push scope
         const command = words[0];
         if (command) {
-          const newScoep = createScope(command);
-          scope.content.push(newScoep);
+          const newScoep = createScope(words.join(" "));
+          scope.properties.push(newScoep);
           scope = newScoep;
           route.push(scope);
+
+          words = [];
+          word = "";
         } else {
           console.warn("scope without command");
         }
@@ -67,8 +78,7 @@ export default class NginxConfig {
 
         if (words.length > 0) {
           // commit line
-          scope.content.push(words);
-          // scope[command] = words.length > 2 ? words.slice(1) : words[1];
+          scope.properties.push(words);
         }
 
         words = [];
@@ -79,27 +89,19 @@ export default class NginxConfig {
       word += char;
     }
 
-    return file;
+    return file.properties;
   }
 
-  static serialize(file: Scope) {
-    const indent = (str: string, indent: number) => {
-      const code = new Array(indent).fill(" ").join("");
-      return str
-        .split(/\n/g)
-        .map((l) => code + l)
-        .join("\n");
-    };
-
+  static serialize(file: ScopeContent) {
     const tostring = (scope: Scope) => {
       let res = "";
 
-      for (const ent of scope.content.slice(1)) {
+      for (const ent of scope.properties) {
         if (Array.isArray(ent)) {
           res += `\n${ent[0]}  ${ent.slice(1).join(" ")};`;
         } else {
-          const line: string[] = ent.content[0] as string[];
-          res += `\n\n${line.join(" ")} {`;
+          const line: string = ent.id;
+          res += `\n\n${line} {`;
           res += indent(tostring(ent), 4);
           res += `\n}`;
         }
@@ -108,6 +110,6 @@ export default class NginxConfig {
       return res;
     };
 
-    return tostring(file);
+    return tostring({ id: "root", properties: file });
   }
 }
